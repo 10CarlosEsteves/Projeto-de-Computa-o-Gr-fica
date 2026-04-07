@@ -1,301 +1,16 @@
-import game_template
-import pygame
-import sys
-import json
 import os
+import sys
 import math
-from dataclasses import dataclass
-from pygame.locals import *
+import pygame
+import game_template
 from OpenGL.GL import *
 from OpenGL.GLU import *
+from pygame.locals import *
 
-@dataclass
-class PlanetaData:
-    name: str
-    size: float
-    rotation_speed: float
-    axis_tilt: float
-    color_or_texture: str
-    has_rings: bool
-    splash_image: str = "" 
-    current_angle: float = 0.0
-    pos_x: float = 0.0
-    pos_y: float = 0.0
-    pos_z: float = 0.0
-    texture_id: int = None
-    splash_texture_id: int = None
-    is_unlocked: bool = False
-
-def load_planets(caminho_arquivo):
-    try:
-        with open(caminho_arquivo, 'r', encoding='utf-8') as arquivo:
-            dados = json.load(arquivo)
-            
-        lista_planetas = []
-        for p in dados['planetas']:
-            novo_planeta = PlanetaData(
-                name=p['nome'],
-                size=p['tamanho'],
-                rotation_speed=p['velocidade_rotacao'],
-                axis_tilt=p['inclinacao_eixo'],
-                color_or_texture=p['cor_ou_textura'],
-                has_rings=p['possui_aneis'],
-                splash_image=p.get('splash_image', "")
-            )
-            lista_planetas.append(novo_planeta)
-            
-        return lista_planetas
-    
-    except Exception as e:
-        print(f"Erro ao carregar planetas: {e}")
-        return []
-
-def hex_to_rgb(hex_color):
-    hex_color = hex_color.lstrip('#')
-    return tuple(int(hex_color[i:i+2], 16) / 255.0 for i in (0, 2, 4))
-
-def load_texture(image_path):
-    try:
-        # carrega a imagem
-        planet_texture = pygame.image.load(image_path)
-        
-        # conversão da imagem para uso
-        image_data = pygame.image.tostring(planet_texture, "RGBA", True)
-        width, height = planet_texture.get_size()
-
-        # gera um id para a textura
-        tex_id = glGenTextures(1)
-        
-        # ativa a textura para configurá-la
-        glBindTexture(GL_TEXTURE_2D, tex_id)
-
-        # suaviza a textura quando o planeta estiver muito perto ou muito longe
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
-
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1)
-
-        # envia para a placa de vídeo
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image_data)
-        
-        return tex_id
-    except Exception as e:
-        print(f"Erro ao carregar textura '{image_path}': {e}")
-        return None
-
-def draw_ring(internal_radius, external_radius, texture_id):
-    # gerando malha com furo no meio
-    quadric = gluNewQuadric()
-    
-    if texture_id is not None:
-        glEnable(GL_TEXTURE_2D)
-        glBindTexture(GL_TEXTURE_2D, texture_id)
-        gluQuadricTexture(quadric, GL_TRUE)
-        # ultimo valor em 1 para garantir canal alpha (transparência)
-        glColor4f(1.0, 1.0, 1.0, 1.0) 
-        
-    # parâmetros: quadric, raio interno, raio externo, fatias, anéis_concêntricos
-    # 64 fatias deixam o anel bem redondinho O
-    gluDisk(quadric, internal_radius, external_radius, 64, 1)
-    
-    gluDeleteQuadric(quadric)
-    
-    if texture_id is not None:
-        glDisable(GL_TEXTURE_2D)
-
-def draw_sphere(radius, hex_color, texture_id):
-    # cria uma esfera
-    quadric = gluNewQuadric()
-    
-    # definindo a cor
-    if texture_id is not None:
-        # liga o modo de textura 2D
-        glEnable(GL_TEXTURE_2D)
-        glBindTexture(GL_TEXTURE_2D, texture_id)
-        gluQuadricTexture(quadric, GL_TRUE)
-        # branco para não alterar a cor da textura
-        glColor3f(1.0, 1.0, 1.0)
-    else:
-        # sem textura, pinta cor sólida
-        glDisable(GL_TEXTURE_2D)
-        if hex_color.startswith('#'):
-            r, g, b = hex_to_rgb(hex_color)
-            glColor3f(r, g, b)
-
-    # parâmetros: quadric, raio, latitude, longitude
-    # uma esfera com 32 divisões horizontais e verticais fica minimamente suave
-    gluSphere(quadric, radius, 32, 32)
-    
-    gluDeleteQuadric(quadric)
-    # dedabilita para próximo carregamento
-    glDisable(GL_TEXTURE_2D)
-
-def draw_background(texture_id):
-    if texture_id is None:
-        return
-
-    # salva as matrizes atuais
-    glMatrixMode(GL_PROJECTION)
-    glPushMatrix()
-    glLoadIdentity() 
-
-    glMatrixMode(GL_MODELVIEW)
-    glPushMatrix()
-    glLoadIdentity()
-
-    # configurações de desenho (desliga o 3D, liga a textura)
-    glDisable(GL_DEPTH_TEST)
-    glEnable(GL_TEXTURE_2D)
-    glBindTexture(GL_TEXTURE_2D, texture_id)
-    glColor3f(1.0, 1.0, 1.0)
-
-    # desenha o quad cravado nas bordas absolutas da tela
-    glBegin(GL_QUADS)
-    
-    # mapeamento: UV da Textura (0 a 1) -> Coordenadas da Tela NDC (-1 a 1)
-    # como carregamos a imagem invertida no PyGame, o UV (0,0) é embaixo
-    
-    # canto Inferior Esquerdo
-    glTexCoord2f(0.0, 0.0); glVertex2f(-1.0, -1.0) 
-    
-    # canto Inferior Direito
-    glTexCoord2f(1.0, 0.0); glVertex2f( 1.0, -1.0) 
-    
-    # canto Superior Direito
-    glTexCoord2f(1.0, 1.0); glVertex2f( 1.0,  1.0) 
-    
-    # canto Superior Esquerdo
-    glTexCoord2f(0.0, 1.0); glVertex2f(-1.0,  1.0) 
-    
-    glEnd()
-
-    glDisable(GL_TEXTURE_2D)
-
-    # restaura o controle para o 3D dos planetas
-    glEnable(GL_DEPTH_TEST)
-    
-    glMatrixMode(GL_PROJECTION)
-    glPopMatrix()
-    
-    glMatrixMode(GL_MODELVIEW)
-    glPopMatrix()
-
-def load_background(path, width, height):
-    try:
-        texture = pygame.image.load(path)
-        
-        # redimensionamento da imagem
-        texture = pygame.transform.smoothscale(texture, (width, height))
-        
-        image_data = pygame.image.tostring(texture, "RGBA", True)
-        
-        # as medidas agora são da tela, não da imagem original
-        final_width, final_height = texture.get_size()
-
-        tex_id = glGenTextures(1)
-        glBindTexture(GL_TEXTURE_2D, tex_id)
-
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
-        
-        # conserta possíveis desalinhamentos de memória
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1)
-
-        # envia a textura exata e sob medida para a GPU
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, final_width, final_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image_data)
-        
-        return tex_id
-    
-    except Exception as e:
-        print(f"Erro ao carregar fundo: {e}")
-        return None
-    
-def draw_tooltip(text, mouse_x, mouse_y, width, height, font, text_color):
-    # renderiza o texto no PyGame (Branco com fundo cinza escuro)
-    text_surface = font.render(f"  {text}  ", True, text_color, (40, 40, 40))
-    text_width, text_height = text_surface.get_size()
-    dados_imagem = pygame.image.tostring(text_surface, "RGBA", True)
-
-    # gera uma textura temporária
-    tex_id = glGenTextures(1)
-    glBindTexture(GL_TEXTURE_2D, tex_id)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, text_width, text_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, dados_imagem)
-
-    # entra no modo 2D (NDC)
-    glMatrixMode(GL_PROJECTION)
-    glPushMatrix()
-    glLoadIdentity()
-    glOrtho(0, width, height, 0, -1, 1)
-
-    glMatrixMode(GL_MODELVIEW)
-    glPushMatrix()
-    glLoadIdentity()
-
-    # desliga a profundidade para desenhar sempre por cima
-    glDisable(GL_DEPTH_TEST)
-    glEnable(GL_TEXTURE_2D)
-    glBindTexture(GL_TEXTURE_2D, tex_id)
-    glColor3f(1.0, 1.0, 1.0)
-
-    # deslocamento leve para o cursor não tampar o texto
-    pos_x = mouse_x + 15
-    pos_y = mouse_y + 15
-
-    # desenha o quad com o texto
-    glBegin(GL_QUADS)
-    glTexCoord2f(0.0, 1.0); glVertex2f(pos_x, pos_y)
-    glTexCoord2f(1.0, 1.0); glVertex2f(pos_x + text_width, pos_y)
-    glTexCoord2f(1.0, 0.0); glVertex2f(pos_x + text_width, pos_y + text_height)
-    glTexCoord2f(0.0, 0.0); glVertex2f(pos_x, pos_y + text_height)
-    glEnd()
-
-    # restaura o estado original
-    glDisable(GL_TEXTURE_2D)
-    glEnable(GL_DEPTH_TEST)
-
-    glMatrixMode(GL_PROJECTION)
-    glPopMatrix()
-    glMatrixMode(GL_MODELVIEW)
-    glPopMatrix()
-
-    # deleta a textura temporária para não estourar a memória
-    glDeleteTextures(1, [tex_id])
-
-def draw_fade_overlay(width, height, alpha):
-    # so desenha se houver alguma opacidade
-    if alpha <= 0.0:
-        return
-
-    glMatrixMode(GL_PROJECTION)
-    glPushMatrix()
-    glLoadIdentity()
-    glOrtho(0, width, height, 0, -1, 1)
-
-    glMatrixMode(GL_MODELVIEW)
-    glPushMatrix()
-    glLoadIdentity()
-
-    # desliga a profundidade e desliga texturas para desenhar cor solida
-    glDisable(GL_DEPTH_TEST)
-    glDisable(GL_TEXTURE_2D)
-    
-    # cor preta com o canal alpha (transparencia) variavel
-    glColor4f(0.0, 0.0, 0.0, alpha)
-
-    glBegin(GL_QUADS)
-    glVertex2f(0, 0)
-    glVertex2f(width, 0)
-    glVertex2f(width, height)
-    glVertex2f(0, height)
-    glEnd()
-
-    glEnable(GL_DEPTH_TEST)
-    glMatrixMode(GL_PROJECTION)
-    glPopMatrix()
-    glMatrixMode(GL_MODELVIEW)
-    glPopMatrix()
+# Módulos novos
+from core.models import PlanetaData, load_planets
+from core.graphics_utils import load_background, load_texture
+from core.renderer import draw_ring, draw_background, draw_sphere, draw_fade_overlay, draw_tooltip
 
 # prepara a cena e as regras de renderização 3D.
 def start_opengl(height, width):
@@ -363,47 +78,46 @@ def main():
         print("\nA lista de planetas está vazia ou o arquivo não foi lido.")
         pygame.quit()
         sys.exit()
-
+        
     # se o arquivo foi carregado, imprime os planetas lidos
     print("\nPlanetas carregados:")
     for planeta in star_system:
         print(f" -> {planeta.name} (Tamanho: {planeta.size} | Cor: {planeta.color_or_texture})")
 
-    pasta_texturas = os.path.join(script_path, 'Texturas') # pega a pasta de texturas
-
+    # --- CORREÇÃO DE CARREGAMENTO DE ASSETS ---
+    # Agora usamos o script_path como base e os caminhos relativos do JSON
     for planet in star_system:
         # verifica se o campo parece ser um arquivo de imagem
         if planet.color_or_texture.lower().endswith(('.png', '.jpg', '.jpeg')):
-            image_path = os.path.join(pasta_texturas, planet.color_or_texture)
+            image_path = os.path.join(script_path, planet.color_or_texture)
             planet.texture_id = load_texture(image_path)
-            status = f"Textura carregada (ID {planet.texture_id})" if planet.texture_id else "Falha na textura"
+            status = f"Textura carregada (ID {planet.texture_id})" if planet.texture_id else f"FALHA: {image_path}"
             print(f" -> {planet.name}: {status}")
         else:
             print(f" -> {planet.name}: Usando cor sólida ({planet.color_or_texture})")
 
-        # carrega as splash arts dos planetas
+        # carrega as splash arts dos planetas usando o caminho do JSON
         if planet.splash_image:
-            splash_path = os.path.join(pasta_texturas, planet.splash_image)
+            splash_path = os.path.join(script_path, planet.splash_image)
             planet.splash_texture_id = load_background(splash_path, screen_width, screen_height)
 
-    # caminho da textura do anel
-    ring_image_path = os.path.join(pasta_texturas, 'anel.png')
-
+    # caminho da textura do anel (ajustado para a sua pasta Assets)
+    ring_image_path = os.path.join(script_path, 'Assets', 'Planet Texture', 'anel.png')
     ring_texture_id = load_texture(ring_image_path)
 
     if ring_texture_id:
         print(" -> Textura dos aneis planetários carregada com sucesso!")
     else:
-        print(" -> Textura 'anel.png' não encontrada")
+        print(f" -> ATENÇÃO: Textura '{ring_image_path}' não encontrada")
 
-    background_image_path = os.path.join(pasta_texturas, 'fundo_espacial.png')
-
+    # caminho da textura de fundo (ajustado para a sua pasta Assets)
+    background_image_path = os.path.join(script_path, 'Assets', 'Backgrounds', 'fundo_espacial.png')
     background_texture_id = load_background(background_image_path, screen_width, screen_height)
 
     if background_texture_id:
         print(" -> Textura de fundo carregada com sucesso!")
     else:
-        print(" -> Textura 'fundo_espacial.png' não encontrada")
+        print(f" -> ATENÇÃO: Textura '{background_image_path}' não encontrada")
 
     # posições em que cada planeta vai ficar na cena
     planet_positions = [
@@ -517,11 +231,8 @@ def main():
             # retorno da fase para menu
             print(f"\nFase concluída: {target_planet.name}!")
             
-            # Desbloqueia o próximo planeta se tiver vencido (Lógica simplificada)
-            # if resultado_fase == "VITORIA":
-                # liberar_proximo_planeta()
-            
             # reseta todas as variáveis de visualização
+            start_opengl(screen_height, screen_width)
             transition_state = "IDLE"
             fade_alpha = 0.0
             target_planet = None
@@ -533,6 +244,7 @@ def main():
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
         
+        # Desenha o fundo espacial
         if background_texture_id:
             draw_background(background_texture_id)
 
@@ -567,7 +279,7 @@ def main():
 
                     if distance < screen_radius:
                         focused_planet = planet
-                except ValueError:
+                except (ValueError, OpenGL.GLU.GLUerror):
                     pass 
 
             glPushMatrix() 
@@ -575,10 +287,12 @@ def main():
             glRotatef(-90.0, 1, 0, 0)
             glRotatef(planet.axis_tilt, 1, 0, 0) 
 
+            # Desenha os anéis se o planeta possuir
             if planet.has_rings:
                 draw_ring(planet.size * 1.2, planet.size * 1.9, ring_texture_id)
 
             glRotatef(planet.current_angle, 0, 0, 1)
+            # Desenha a esfera do planeta
             draw_sphere(planet.size, planet.color_or_texture, planet.texture_id)
             glPopMatrix() 
 
@@ -593,11 +307,12 @@ def main():
                 
             draw_tooltip(texto_ui, mouse_x, mouse_y, screen_width, screen_height, fonte_tooltip, cor_texto)
 
-        # máquina de estados visuais de transição
+        # máquina de estados visuais de transição (Splash Art)
         if transition_state in ["SPLASH_FADE_IN", "SPLASH_WAIT"]:
             if target_planet and target_planet.splash_texture_id:
                 draw_background(target_planet.splash_texture_id)
 
+        # Overlay de fade (transição suave para o preto)
         if fade_alpha > 0.0:
             draw_fade_overlay(screen_width, screen_height, fade_alpha)
 

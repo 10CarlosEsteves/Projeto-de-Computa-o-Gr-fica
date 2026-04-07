@@ -1,3 +1,4 @@
+
 {
   "planetas": [
     {
@@ -5,45 +6,45 @@
       "tamanho": 2.0,
       "velocidade_rotacao": 0.06,
       "inclinacao_eixo": -23.5,
-      "cor_ou_textura": "Alpine.png",
+      "cor_ou_textura": "Assets/Planet Texture/Alpine.png",
       "possui_aneis": false,
-      "splash_image": "tau_ceti_splash.png"
+      "splash_image": "Assets/Splash/tau_ceti_splash.png"
     },
     {
       "nome": "Esteves",
       "tamanho": 6.1,
       "velocidade_rotacao": 0.04,
       "inclinacao_eixo": -26.7,
-      "cor_ou_textura": "Gaseous4.png",
+      "cor_ou_textura": "Assets/Planet Texture/Gaseous4.png",
       "possui_aneis": true,
-      "splash_image": "esteves_splash.png"
+      "splash_image": "Assets/Splash/esteves_splash.png"
     },
     {
       "nome": "Vendas",
       "tamanho": 2.5,
       "velocidade_rotacao": 0.09,
       "inclinacao_eixo": -21.6,
-      "cor_ou_textura": "Martian.png", 
+      "cor_ou_textura": "Assets/Planet Texture/Martian.png", 
       "possui_aneis": false,
-      "splash_image": "splash.png"
+      "splash_image": "Assets/Splash/splash.png"
     },
     {
       "nome": "Arago",
       "tamanho": 1.9,
       "velocidade_rotacao": -0.08,
       "inclinacao_eixo": -20.5,
-      "cor_ou_textura": "Volcanic.png", 
+      "cor_ou_textura": "Assets/Planet Texture/Volcanic.png", 
       "possui_aneis": false,
-      "splash_image": "splash.png"
+      "splash_image": "Assets/Splash/splash.png"
     },
     {
       "nome": "Regis",
       "tamanho": 0.5,
       "velocidade_rotacao": 0.2,
       "inclinacao_eixo": -15.5,
-      "cor_ou_textura": "Tropical.png", 
+      "cor_ou_textura": "Assets/Planet Texture/Tropical.png", 
       "possui_aneis": true,
-      "splash_image": "splash.png"
+      "splash_image": "Assets/Splash/splash.png"
     }
   ]
 }
