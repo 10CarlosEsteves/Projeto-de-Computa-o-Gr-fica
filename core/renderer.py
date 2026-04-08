@@ -190,3 +190,31 @@ def draw_fade_overlay(width, height, alpha):
     glPopMatrix()
     glMatrixMode(GL_MODELVIEW)
     glPopMatrix()
+
+# prepara a cena e as regras de renderização 3D.
+def start_opengl(height, width):
+    # define a área exata da tela
+    glViewport(0, 0, int(width), int(height))
+
+    # define a perspectiva (câmera)
+    glMatrixMode(GL_PROJECTION)
+    glLoadIdentity()
+    
+    # parâmetros: FOV (45 graus), Aspect Ratio (largura/altura), Near Clipping Plane, Far Clipping Plane
+    # tudo que estiver mais perto que 0.1 ou mais longe que 1000 não será renderizado
+    gluPerspective(45, (width / height), 0.1, 1000.0)
+    
+    # retorna para a matriz de visualização de modelos
+    glMatrixMode(GL_MODELVIEW)
+    glLoadIdentity()
+    
+    # afasta a câmera no eixo Z para podermos ver o centro do espaço
+    glTranslatef(0.0, 0.0, -50.0)
+    
+    # ativa o Z-Buffer (teste de profundidade)
+    # fundamental para que modelos 3D não sejam desenhados de dentro para fora
+    glEnable(GL_DEPTH_TEST)
+
+    # suporte de canal alpha (transparência)
+    glEnable(GL_BLEND)
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
